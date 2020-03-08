@@ -54,7 +54,7 @@ public:
     uint8_t *buffer;
     int status;
 //    SLManager *slManager;
-    bool decodeFinished;
+    volatile bool decodeFinished;
 
     SLObjectItf engineObject = nullptr;
     SLEngineItf engineEngine;
@@ -68,6 +68,7 @@ public:
 
     SLEffectSendItf playerEffectSend;
     SLVolumeItf playerVolume;
+    SLMuteSoloItf playerMuteSolo;
 
     int duration;
     AVRational time_base;
@@ -75,6 +76,9 @@ public:
     double lastClock;
 
     volatile bool exit = false;
+    pthread_mutex_t seekMutex;
+    pthread_mutex_t prepareMutex;
+    pthread_mutex_t decodeMutex;
 
     AudioPlayer();
 
@@ -108,6 +112,10 @@ public:
     void resume();
 
     void seekTo(jint time);
+
+    void setVolume(jint volume);
+
+    void setSoundChannel(jint channel);
 };
 
 

@@ -9,9 +9,14 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.SeekBar;
 import android.widget.TextView;
 
+import com.example.audioplayer.bean.Song;
 import com.example.audioplayer.bean.TimeMetaData;
+import com.example.audioplayer.enums.SoundChannel;
 
 import java.io.File;
 
@@ -19,28 +24,41 @@ public class MainActivity extends AppCompatActivity {
 
 
     private AudioPlayer audioPlayer;
-    private TextView mAudioProgressTv;
-
-    private static String[] urls = {
-            "http://mpge.5nd.com/2015/2015-11-26/69708/1.mp3",
-            "http://mpge.5nd.com/2020/2020-2-29/95962/1.mp3",
-            "http://mpge.5nd.com/2020/2020-2-21/95909/1.mp3",
-            "http://mpge.5nd.com/2019/2019-12-16/95097/1.mp3"
+    private static Song[] songs = {
+            new Song("第一首", "http://mpge.5nd.com/2015/2015-11-26/69708/1.mp3"),
+            new Song("第二首", "http://mpge.5nd.com/2020/2020-2-29/95962/1.mp3"),
+            new Song("第三首", "http://mpge.5nd.com/2020/2020-2-21/95909/1.mp3"),
+            new Song("第四首", "http://mpge.5nd.com/2019/2019-12-16/95097/1.mp3")
     };
     private int index = 0;
+
+    private TextView mSongNameTv;
+    private CheckBox mPlayCb;
+    private SeekBar mPlaySeekBar;
+    private TextView mProgressTv;
+    private TextView mTotalTimeTv;
+    private SeekBar mVolumeSeekBar;
+    private int mProgress;
+    private boolean isSeeking;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        initView();
+        initAudioPlayer();
+    }
+
+    private void initAudioPlayer() {
         String audioPath = new File(getExternalFilesDir(null), "audio.mp3").getAbsolutePath();
         audioPlayer = new AudioPlayer();
-        audioPlayer.setDataSource(urls[0]);
+        audioPlayer.setDataSource(songs[0].url);
         audioPlayer.setOnPrepareListener(new AudioPlayer.OnStateChangeListener() {
             @Override
             public void onPrepared() {
                 Log.e("MediaPlayer", "---onPrepared");
                 audioPlayer.start();
+                mPlayCb.setChecked(true);
             }
 
             @Override
@@ -61,61 +79,97 @@ public class MainActivity extends AppCompatActivity {
         audioPlayer.setOnTimeMetaDataAvailableListener(new AudioPlayer.OnTimeMetaDataAvailableListener() {
             @Override
             public void onTimeMetaDataAvailable(TimeMetaData timeMetaData) {
-                mAudioProgressTv.setText(formatTime(timeMetaData.getProgressTime()) + "/" + formatTime(timeMetaData.getDuration()));
+                if (!isSeeking) {
+                    int progress = (int) (timeMetaData.getProgressTime() / timeMetaData.getDuration() * 100);
+                    mPlaySeekBar.setProgress(progress);
+                }
+                mProgressTv.setText(formatTime(timeMetaData.getProgressTime()));
+                mTotalTimeTv.setText(formatTime(timeMetaData.getDuration()));
             }
         });
-        mAudioProgressTv = findViewById(R.id.audio_progress_tv);
+    }
+
+    private void initView() {
+        mSongNameTv = findViewById(R.id.song_name_tv);
+        mPlaySeekBar = findViewById(R.id.play_progress_seekbar);
+        mProgressTv = findViewById(R.id.progress_tv);
+        mTotalTimeTv = findViewById(R.id.total_time_tv);
+        mVolumeSeekBar = findViewById(R.id.volume_seekbar);
+        mVolumeSeekBar.setProgress(100);
+        mPlayCb = findViewById(R.id.play_checkbox);
+        mPlaySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    mProgress = progress;
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                isSeeking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                int targetTime = (int) ((mProgress * audioPlayer.getDuration() * 1.0f) / 100);
+                audioPlayer.seekTo(targetTime);
+                isSeeking = false;
+            }
+        });
+        mVolumeSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                audioPlayer.setVolume(progress);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
+
+        mPlayCb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isChecked) {
+                    audioPlayer.resume();
+                } else {
+                    audioPlayer.pause();
+                }
+            }
+        });
     }
 
     private String formatTime(double timeInSec) {
         int minute = (int) (timeInSec / 60);
         int sec = (int) (timeInSec % 60);
-        return minute + ":" + sec;
+        String minuteStr = minute < 10 ? "0" + minute : minute + "";
+        String sedStr = sec < 10 ? "0" + sec : sec + "";
+        return minuteStr + ":" + sedStr;
     }
 
     public void start(View view) {
         audioPlayer.prepareAsync();
     }
 
-    public void pause(View view) {
-        audioPlayer.pause();
-    }
-
-    public void resume(View view) {
-        audioPlayer.resume();
-    }
-
-    public String getSystemOperator() {
-        String providersName = "";
-        try {
-            TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-            if (telephonyManager == null) {
-                return providersName;
-            }
-
-            @SuppressLint({"MissingPermission", "HardwareIds"})
-            String IMSI = telephonyManager.getSubscriberId();
-            if (!TextUtils.isEmpty(IMSI)) {
-                if (IMSI.startsWith("46000") || IMSI.startsWith("46002")) {
-                    providersName = "中国移动";
-                } else if (IMSI.startsWith("46001")) {
-                    providersName = "中国联通";
-                } else if (IMSI.startsWith("46003")) {
-                    providersName = "中国电信";
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return providersName;
-    }
-
-    public void seek(View view) {
-        audioPlayer.seekTo(100);
-    }
-
     public void stop(View view) {
         audioPlayer.stop();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
     }
 
     @Override
@@ -128,22 +182,38 @@ public class MainActivity extends AppCompatActivity {
     public void next(View view) {
         audioPlayer.stop();
         index++;
-        if (index >= urls.length) {
+        if (index >= songs.length) {
             index = 0;
         }
-        audioPlayer.setDataSource(urls[index]);
-        audioPlayer.prepare();
-        audioPlayer.start();
+        playSong(songs[index]);
     }
 
     public void last(View view) {
         audioPlayer.stop();
         index--;
-        if (index <= 0) {
-            index = 0;
+        if (index < 0) {
+            index = songs.length - 1;
         }
-        audioPlayer.setDataSource(urls[index]);
-        audioPlayer.prepare();
-        audioPlayer.start();
+        playSong(songs[index]);
+    }
+
+    private void playSong(Song song) {
+        if (song == null) return;
+
+        mSongNameTv.setText(song.name);
+        audioPlayer.setDataSource(song.url);
+        audioPlayer.prepareAsync();
+    }
+
+    public void setLeftMute(View view) {
+        audioPlayer.setSoundChannel(SoundChannel.LEFT);
+    }
+
+    public void setCenterMute(View view) {
+        audioPlayer.setSoundChannel(SoundChannel.CENTER);
+    }
+
+    public void setRightMute(View view) {
+        audioPlayer.setSoundChannel(SoundChannel.RIGHT);
     }
 }

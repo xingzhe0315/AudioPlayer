@@ -102,6 +102,7 @@ start(JNIEnv *env, jobject thiz, jlong nativePtr) {
 extern "C"
 JNIEXPORT void JNICALL
 stop(JNIEnv *env, jobject thiz, jlong nativePtr) {
+    LOGE(TAG, "############ begin jni stop ############");
     AudioPlayer *audioPlayer = getAudioPlayer(nativePtr);
     audioPlayer->release();
 }
@@ -134,6 +135,20 @@ seekTo(JNIEnv *env, jobject thiz, jlong nativePtr, jint time) {
 
 extern "C"
 JNIEXPORT void JNICALL
+setVolume(JNIEnv *env, jobject obj, jlong nativePtr, jint volume) {
+    AudioPlayer *audioPlayer = getAudioPlayer(nativePtr);
+    audioPlayer->setVolume(volume);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+setSoundChannel(JNIEnv *env, jobject obj, jlong nativePtr, jint channel) {
+    AudioPlayer *audioPlayer = getAudioPlayer(nativePtr);
+    audioPlayer->setSoundChannel(channel);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
 native_init(JNIEnv *env, jobject thiz) {
     auto *audioPlayer = new AudioPlayer();
     auto *listener = new JNIAudioPlayerListener(env, thiz);
@@ -149,16 +164,18 @@ native_init(JNIEnv *env, jobject thiz) {
 }
 
 const JNINativeMethod nativeMethod[] = {
-        {"_native_init",   "()V",                    (void *) native_init},
-        {"_setDataSource", "(Ljava/lang/String;J)V", (void *) setDataSource},
-        {"_prepare",       "(J)V",                   (void *) prepare},
-        {"_prepareAsync",  "(J)V",                   (void *) prepareAsync},
-        {"_start",         "(J)V",                   (void *) start},
-        {"_pause",         "(J)V",                   (void *) pause},
-        {"_resume",        "(J)V",                   (void *) resume},
-        {"_stop",          "(J)V",                   (void *) stop},
-        {"_release",       "(J)V",                   (void *) release},
-        {"_seekTo",        "(JI)V",                  (void *) seekTo}
+        {"_native_init",     "()V",                    (void *) native_init},
+        {"_setDataSource",   "(Ljava/lang/String;J)V", (void *) setDataSource},
+        {"_prepare",         "(J)V",                   (void *) prepare},
+        {"_prepareAsync",    "(J)V",                   (void *) prepareAsync},
+        {"_start",           "(J)V",                   (void *) start},
+        {"_pause",           "(J)V",                   (void *) pause},
+        {"_resume",          "(J)V",                   (void *) resume},
+        {"_stop",            "(J)V",                   (void *) stop},
+        {"_release",         "(J)V",                   (void *) release},
+        {"_seekTo",          "(JI)V",                  (void *) seekTo},
+        {"_setVolume",       "(JI)V",                  (void *) setVolume},
+        {"_setSoundChannel", "(JI)V",                  (void *) setSoundChannel}
 };
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reversed) {

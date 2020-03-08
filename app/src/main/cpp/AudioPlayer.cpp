@@ -116,23 +116,32 @@ int AudioPlayer::resampleFrame(uint8_t **inBuffer) {
 
 
 bool _prepare(AudioPlayer *audioPlayer) {
+    pthread_mutex_lock(&audioPlayer->prepareMutex);
+    LOGE(TAG, "start prepare");
     const char *dataSource = audioPlayer->mDataSource;
     if (dataSource == nullptr) {
         LOGE(TAG, "mDataSource can not be null");
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
+    LOGE(TAG, "get data source success %s", dataSource);
     AVFormatContext *avFormatContext = avformat_alloc_context();
+    LOGE(TAG, "avformat inited!!!");
     int result = -1;
     result = avformat_open_input(&avFormatContext, dataSource, nullptr, nullptr);
     if (result != 0) {
         LOGE(TAG, "avformat_open_input error : %d", result);
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
+    LOGE(TAG, "open input success!!!");
     result = avformat_find_stream_info(avFormatContext, nullptr);
     if (result < 0) {
         LOGE(TAG, "avformat_find_stream_info error : %d", result);
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
+    LOGE(TAG, "find stream info success");
     int audioIndex = -1;
     for (int i = 0; i < avFormatContext->nb_streams; ++i) {
         AVStream *avStream = avFormatContext->streams[i];
@@ -146,8 +155,10 @@ bool _prepare(AudioPlayer *audioPlayer) {
             break;
         }
     }
+    LOGE(TAG, "get the audio track indes");
     if (audioIndex == -1) {
         LOGE(TAG, "failed to find audio stream!!!");
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
     AVCodecContext *avCodecContext = avcodec_alloc_context3(nullptr);
@@ -155,17 +166,20 @@ bool _prepare(AudioPlayer *audioPlayer) {
                                            avFormatContext->streams[audioIndex]->codecpar);
     if (result < 0) {
         LOGE(TAG, "avcodec_parameters_to_context error : %d", result);
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
     AVCodec *avCodec = avcodec_find_decoder(avCodecContext->codec_id);
     if (avCodec == nullptr) {
         LOGE(TAG, "avcodec_find_decoder failed!!!");
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
 
     result = avcodec_open2(avCodecContext, avCodec, nullptr);
     if (result != 0) {
         LOGE(TAG, "avcodec_open2 error:%d", result);
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
     int sampleRate = avCodecContext->sample_rate;
@@ -182,6 +196,7 @@ bool _prepare(AudioPlayer *audioPlayer) {
             0, nullptr);
     if (!swrContext || swr_init(swrContext)) {
         LOGE(TAG, "swrcontext init error");
+        pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
     audioPlayer->createBufferQueuePlayer(avCodecContext->sample_rate);
@@ -191,14 +206,17 @@ bool _prepare(AudioPlayer *audioPlayer) {
     audioPlayer->status = PLAY_STATUS_PREPARED;
     audioPlayer->swrContext = swrContext;
     LOGE(TAG, "audio player prepared!");
+    pthread_mutex_unlock(&audioPlayer->prepareMutex);
     return true;
 }
 
 void *_prepareAsync(void *data) {
+    LOGE(TAG, "############ begin _prepareAsync ############");
     auto *audioPlayer = static_cast<AudioPlayer *>(data);
     if (_prepare(audioPlayer)) {
         audioPlayer->mListener->notify(1, THREAD_WORK);
     }
+    LOGE(TAG, "############ end _prepareAsync ############");
     pthread_exit(&audioPlayer->prepareThread);
 }
 
@@ -211,13 +229,24 @@ void AudioPlayer::prepareAsync() {
 }
 
 void *decode(void *data) {
+    LOGE(TAG, "############ begin decode ############");
     auto *audioPlayer = static_cast<AudioPlayer *>(data);
     AVPacket *avPacket = av_packet_alloc();
-    while (av_read_frame(audioPlayer->avFormatContext, avPacket) == 0 && !audioPlayer->exit) {
-        if (avPacket->stream_index == audioPlayer->audioIndex) {
-            audioPlayer->mPacketQueue->putAudioPacket(avPacket);
+    while (!audioPlayer->exit && audioPlayer->avFormatContext != nullptr) {
+        LOGE(TAG, "############ decoding exit = %d ############", audioPlayer->exit);
+        pthread_mutex_lock(&audioPlayer->decodeMutex);
+        pthread_mutex_lock(&audioPlayer->seekMutex);
+        int ret = av_read_frame(audioPlayer->avFormatContext, avPacket);
+        pthread_mutex_unlock(&audioPlayer->seekMutex);
+        pthread_mutex_unlock(&audioPlayer->decodeMutex);
+        if (ret == 0) {
+            if (avPacket->stream_index == audioPlayer->audioIndex) {
+                audioPlayer->mPacketQueue->putAudioPacket(avPacket);
+            }
+            avPacket = av_packet_alloc();
+        } else {
+            break;
         }
-        avPacket = av_packet_alloc();
     }
     LOGE(TAG, "解码完成！");
     audioPlayer->decodeFinished = true;
@@ -225,9 +254,11 @@ void *decode(void *data) {
 }
 
 void *play(void *data) {
+    LOGE(TAG, "############ begin play ############");
     auto *audioPlayer = static_cast<AudioPlayer *>(data);
     audioPlayer->startPlay();
     playCallback(audioPlayer->playerBufferQueue, audioPlayer);
+    LOGE(TAG, "############ end play ############");
     pthread_exit(&audioPlayer->playThread);
 }
 
@@ -240,6 +271,7 @@ void AudioPlayer::start() {
         LOGE(TAG, "AudioPlayer is already playing!!!");
         return;
     }
+    LOGE(TAG, "############ begin start ############");
     exit = false;
     mListener->notify(PLAY_STATUS_PLAYING, THREAD_MAIN);
     status = PLAY_STATUS_PLAYING;
@@ -248,40 +280,50 @@ void AudioPlayer::start() {
 }
 
 void AudioPlayer::stop() {
+    LOGE(TAG, "############ begin stop ############");
     if (audioPlayer != nullptr) {
         (*audioPlayer)->SetPlayState(audioPlayer, SL_PLAYSTATE_STOPPED);
     }
     status = PLAY_STATUS_STOPED;
+    LOGE(TAG, "############ end stop ############");
 }
 
 
 void AudioPlayer::release() {
+    pthread_mutex_lock(&prepareMutex);
+    pthread_mutex_lock(&decodeMutex);
+    LOGE(TAG, "############ begin release ############");
     stop();
     exit = true;
+    LOGE(TAG, "############ set exit to true ############");
     if (mPacketQueue != nullptr) {
         mPacketQueue->clear(INT64_MAX);
+        LOGE(TAG, "mPacketQueue cleared!!!");
     }
     if (audioPlayerObject != nullptr) {
         (*audioPlayerObject)->Destroy(audioPlayerObject);
         audioPlayerObject = nullptr;
         audioPlayer = nullptr;
         playerBufferQueue = nullptr;
-
+        LOGE(TAG, "audioPlayerObject released!!!");
     }
 
     if (avCodecContext != nullptr) {
         avcodec_close(avCodecContext);
         avcodec_free_context(&avCodecContext);
         avCodecContext = nullptr;
+        LOGE(TAG, "avCodecContext freed!!!");
     }
     if (avFormatContext != nullptr) {
-        avformat_close_input(&avFormatContext);
-        avformat_free_context(avFormatContext);
-        avFormatContext = nullptr;
+//        avformat_close_input(&avFormatContext);
+//        avformat_free_context(avFormatContext);
+//        avFormatContext = nullptr;
+        LOGE(TAG, "avFormatContext freed!!!");
     }
-
+    LOGE(TAG, "############ end release ############");
+    pthread_mutex_unlock(&decodeMutex);
+    pthread_mutex_unlock(&prepareMutex);
 }
-
 
 void AudioPlayer::pause() {
     if (status == PLAY_STATUS_PLAYING) {
@@ -302,6 +344,9 @@ AudioPlayer::AudioPlayer() {
     mPacketQueue = new AudioPacketQueue();
     buffer = static_cast<uint8_t *>(av_malloc(44100 * 2 * 2));
     createEngine();
+    pthread_mutex_init(&seekMutex, nullptr);
+    pthread_mutex_init(&decodeMutex, nullptr);
+    pthread_mutex_init(&prepareMutex, nullptr);
 }
 
 AudioPlayer::~AudioPlayer() {
@@ -309,7 +354,7 @@ AudioPlayer::~AudioPlayer() {
     mListener = nullptr;
 
     if (buffer != nullptr) {
-        delete (buffer);
+        free(buffer);
         buffer = nullptr;
     }
     if (outputMixObject != nullptr) {
@@ -327,6 +372,9 @@ AudioPlayer::~AudioPlayer() {
         mPacketQueue->clear(INT64_MAX);
         mPacketQueue = nullptr;
     }
+    pthread_mutex_destroy(&seekMutex);
+    pthread_mutex_destroy(&decodeMutex);
+    pthread_mutex_destroy(&prepareMutex);
 }
 
 void AudioPlayer::setListener(AudioPlayerListener *listener) {
@@ -382,7 +430,6 @@ void AudioPlayer::createEngine() {
     }
 }
 
-
 void AudioPlayer::createBufferQueuePlayer(int sampleRate) {
     SLresult result;
     SLDataLocator_AndroidSimpleBufferQueue locatorBufferQueue = {
@@ -403,16 +450,16 @@ void AudioPlayer::createBufferQueuePlayer(int sampleRate) {
     SLDataLocator_OutputMix locatorOutputMix = {SL_DATALOCATOR_OUTPUTMIX, outputMixObject};
     SLDataSink dataSink = {&locatorOutputMix, nullptr};
 
-    const SLInterfaceID ids[3] = {SL_IID_BUFFERQUEUE, SL_IID_VOLUME, SL_IID_EFFECTSEND,
-            /*SL_IID_MUTESOLO,*/};
-    const SLboolean req[3] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE,
-            /*SL_BOOLEAN_TRUE,*/ };
+    const SLInterfaceID ids[4] = {SL_IID_BUFFERQUEUE, SL_IID_VOLUME, SL_IID_EFFECTSEND,
+                                  SL_IID_MUTESOLO};
+    const SLboolean req[4] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE,
+                              SL_BOOLEAN_TRUE};
     result = (*engineEngine)->CreateAudioPlayer(
             engineEngine,
             &audioPlayerObject,
             &dataSource,
             &dataSink,
-            3,
+            4,
             ids,
             req
     );
@@ -457,6 +504,13 @@ void AudioPlayer::createBufferQueuePlayer(int sampleRate) {
              "(*audioPlayerObject)->GetInterface(audioPlayerObject, SL_IID_VOLUME, &playerVolume); error!!!");
     }
     assert(SL_RESULT_SUCCESS == result);
+    result = (*audioPlayerObject)->GetInterface(audioPlayerObject, SL_IID_MUTESOLO,
+                                                &playerMuteSolo);
+    if (SL_RESULT_SUCCESS != result) {
+        LOGE(TAG,
+             "(*audioPlayerObject)->GetInterface(audioPlayerObject, SL_IID_MUTESOLO, &playerMuteSolo); error!!!");
+    }
+    assert(SL_RESULT_SUCCESS == result);
 }
 
 void AudioPlayer::startPlay() {
@@ -467,26 +521,61 @@ void AudioPlayer::seekTo(int time) {
     if (time < 0 || time > duration) {
         return;
     }
+    pthread_mutex_lock(&seekMutex);
     auto ts = ((double) time) / av_q2d(time_base);
     LOGE(TAG, "seek to : time =  %f", ts);
     if (time > clock) {
         mPacketQueue->clear(ts);
     } else {
-        mPacketQueue->clear(INT64_MAX);
-        avformat_seek_file(avFormatContext, audioIndex, INT64_MIN, ts, INT64_MAX, 0);
         if (decodeFinished) {
             decodeFinished = false;
             pthread_create(&decodeThread, nullptr, decode, this);
         }
+        mPacketQueue->clear(INT64_MAX);
+        avformat_seek_file(avFormatContext, audioIndex, INT64_MIN, ts, INT64_MAX, 0);
+
     }
-//    pthread_mutex_lock(&seekMutex);
+    pthread_mutex_unlock(&seekMutex);
+}
 
-//    pthread_mutex_unlock(&seekMutex);
+void AudioPlayer::setVolume(int percent) {
+    if (playerVolume != NULL) {
+        if (percent > 30) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -20);
+        } else if (percent > 25) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -22);
+        } else if (percent > 20) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -25);
+        } else if (percent > 15) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -28);
+        } else if (percent > 10) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -30);
+        } else if (percent > 5) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -34);
+        } else if (percent > 3) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -37);
+        } else if (percent > 0) {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -40);
+        } else {
+            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -100);
+        }
+    }
+}
 
-
-//    mPacketQueue->clear(ts);
-//    clock = 0;
-    av_seek_frame(avFormatContext, audioIndex, static_cast<int64_t>(ts), AVSEEK_FLAG_BACKWARD);
+void AudioPlayer::setSoundChannel(jint channel) {
+    if (channel == 0)//center
+    {
+        (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 1, false);
+        (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, false);
+    } else if (channel == 1)//left
+    {
+        (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 1, true);
+        (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, false);
+    } else if (channel == 2)//right
+    {
+        (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 1, false);
+        (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, true);
+    }
 }
 
 

@@ -6,6 +6,7 @@ import android.os.Message;
 import androidx.annotation.NonNull;
 
 import com.example.audioplayer.bean.TimeMetaData;
+import com.example.audioplayer.enums.SoundChannel;
 
 import java.lang.ref.WeakReference;
 
@@ -95,6 +96,21 @@ public class AudioPlayer {
         }
     }
 
+    public int getDuration() {
+        if (mTimeMetaData != null) {
+            return mTimeMetaData.getDuration();
+        }
+        return 0;
+    }
+
+    public void setVolume(int volume) {
+        _setVolume(mNativePtr, volume);
+    }
+
+    public void setSoundChannel(SoundChannel channel) {
+        _setSoundChannel(mNativePtr, channel.getValue());
+    }
+
     private native void _setDataSource(String dataSource, long nativePtr);
 
     private native void _prepare(long nativePtr);
@@ -114,6 +130,10 @@ public class AudioPlayer {
     private native void _release(long nativePtr);
 
     private native void _seekTo(long nativePtr, int time);
+
+    private native void _setVolume(long nativePtr, int volume);
+
+    private native void _setSoundChannel(long nativePtr, int channel);
 
     public void setOnPrepareListener(OnStateChangeListener onStateChangeListener) {
         this.mOnStateChangeListener = onStateChangeListener;
