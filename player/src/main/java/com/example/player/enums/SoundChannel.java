@@ -1,4 +1,4 @@
-package com.example.audioplayer.enums;
+package com.example.player.enums;
 
 public enum SoundChannel {
     CENTER(0), LEFT(1), RIGHT(2);

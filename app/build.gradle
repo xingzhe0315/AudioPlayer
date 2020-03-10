@@ -10,12 +10,6 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        externalNativeBuild {
-            cmake {
-                cppFlags ""
-                abiFilters "armeabi-v7a"
-            }
-        }
         ndk {
             abiFilters "armeabi-v7a"
         }
@@ -26,12 +20,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.10.2"
-        }
-    }
+
     // 将通知栏用到的相关资源id固定，防止id变化导致在一些机型上出现资源找不到的异常，仅适用于aapt2
     aaptOptions {
         File publicTxtFile = project.file('public.txt')
@@ -50,4 +39,5 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.1.1'
+    implementation project(path: ':player')
 }

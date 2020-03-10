@@ -179,7 +179,7 @@ const JNINativeMethod nativeMethod[] = {
 };
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reversed) {
-    const char *className = "com/example/audioplayer/AudioPlayer";
+    const char *className = "com/example/player/AudioPlayer";
     javaVm = vm;
     JNIEnv *env;
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK) {

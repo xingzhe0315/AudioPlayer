@@ -2,11 +2,7 @@ package com.example.audioplayer;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.annotation.SuppressLint;
-import android.content.Context;
 import android.os.Bundle;
-import android.telephony.TelephonyManager;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
@@ -14,9 +10,9 @@ import android.widget.CompoundButton;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import com.example.audioplayer.bean.Song;
-import com.example.audioplayer.bean.TimeMetaData;
-import com.example.audioplayer.enums.SoundChannel;
+import com.example.player.AudioPlayer;
+import com.example.player.bean.TimeMetaData;
+import com.example.player.enums.SoundChannel;
 
 import java.io.File;
 

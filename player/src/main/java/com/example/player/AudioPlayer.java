@@ -1,12 +1,13 @@
-package com.example.audioplayer;
+package com.example.player;
 
 import android.os.Handler;
 import android.os.Message;
 
 import androidx.annotation.NonNull;
 
-import com.example.audioplayer.bean.TimeMetaData;
-import com.example.audioplayer.enums.SoundChannel;
+
+import com.example.player.bean.TimeMetaData;
+import com.example.player.enums.SoundChannel;
 
 import java.lang.ref.WeakReference;
 

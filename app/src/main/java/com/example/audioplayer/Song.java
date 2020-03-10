@@ -1,4 +1,4 @@
-package com.example.audioplayer.bean;
+package com.example.audioplayer;
 
 public class Song {
     public String name;

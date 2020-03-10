@@ -1,4 +1,4 @@
-package com.example.audioplayer.bean;
+package com.example.player.bean;
 
 public class TimeMetaData {
     private int duration;

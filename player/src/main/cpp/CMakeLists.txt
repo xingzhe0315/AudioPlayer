@@ -24,7 +24,7 @@ add_library( # Sets the name of the library.
         SLManager.cpp)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 set(JNILIBS_SRC ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
-
+message(${ANDROID_ABI})
 add_library(
         avcodec
         SHARED
