@@ -5,7 +5,6 @@ import android.os.Message;
 
 import androidx.annotation.NonNull;
 
-
 import com.example.player.bean.TimeMetaData;
 import com.example.player.enums.SoundChannel;
 
@@ -112,6 +111,14 @@ public class AudioPlayer {
         _setSoundChannel(mNativePtr, channel.getValue());
     }
 
+    public void setPitch(float pitch) {
+        _setPitch(mNativePtr, pitch);
+    }
+
+    public void setSpeed(float speed) {
+        _setSpeed(mNativePtr, speed);
+    }
+
     private native void _setDataSource(String dataSource, long nativePtr);
 
     private native void _prepare(long nativePtr);
@@ -135,6 +142,10 @@ public class AudioPlayer {
     private native void _setVolume(long nativePtr, int volume);
 
     private native void _setSoundChannel(long nativePtr, int channel);
+
+    private native void _setPitch(long nativePtr, float pitch);
+
+    private native void _setSpeed(long nativePtr, float speed);
 
     public void setOnPrepareListener(OnStateChangeListener onStateChangeListener) {
         this.mOnStateChangeListener = onStateChangeListener;

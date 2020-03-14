@@ -52,14 +52,14 @@ SLuint32 convertSampleRate(int sampleRate) {
 void playCallback(SLAndroidSimpleBufferQueueItf caller,
                   void *pContext) {
     auto *audioPlayer = static_cast<AudioPlayer *>(pContext);
-    int dataSize = audioPlayer->resampleFrame(&audioPlayer->buffer);
+    int dataSize = audioPlayer->getSoundTouchData();
     if (dataSize != 0) {
         audioPlayer->clock +=
                 ((double) dataSize) / audioPlayer->avCodecContext->sample_rate * 2 * 2;
         audioPlayer->mListener->updateTime(audioPlayer->duration, audioPlayer->clock, THREAD_WORK);
         (*audioPlayer->playerBufferQueue)->Enqueue(audioPlayer->playerBufferQueue,
-                                                   audioPlayer->buffer,
-                                                   static_cast<SLuint32>(dataSize));
+                                                   audioPlayer->sampleBuffer,
+                                                   static_cast<SLuint32>(dataSize * 4));
     }
 }
 
@@ -67,7 +67,7 @@ void AudioPlayer::setDataSource(const char *dataSource) {
     this->mDataSource = dataSource;
 }
 
-int AudioPlayer::resampleFrame(uint8_t **inBuffer) {
+int AudioPlayer::resampleFrame() {
     AVPacket *avPacket = av_packet_alloc();
     AVFrame *avFrame = av_frame_alloc();
     int dataSize = 0;
@@ -94,16 +94,16 @@ int AudioPlayer::resampleFrame(uint8_t **inBuffer) {
         mPacketQueue->getAudioPacket(avPacket);
         if (avcodec_send_packet(avCodecContext, avPacket) == 0
             && avcodec_receive_frame(avCodecContext, avFrame) == 0) {
-            int nb = swr_convert(swrContext,
-                                 inBuffer,
-                                 avFrame->nb_samples,
-                                 reinterpret_cast<const uint8_t **>(&avFrame->data),
-                                 avFrame->nb_samples);
-            int channelNumber = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
+            sampleNumPerChannel = swr_convert(swrContext,
+                                              &buffer,
+                                              avFrame->nb_samples,
+                                              reinterpret_cast<const uint8_t **>(&avFrame->data),
+                                              avFrame->nb_samples);
+            int channelNum = av_get_channel_layout_nb_channels(AV_CH_LAYOUT_STEREO);
             dataSize = av_samples_get_buffer_size(
                     nullptr,
-                    channelNumber,
-                    nb,
+                    channelNum,
+                    sampleNumPerChannel,
                     AV_SAMPLE_FMT_S16,
                     1);
             clock = avFrame->pts * av_q2d(time_base);
@@ -112,6 +112,24 @@ int AudioPlayer::resampleFrame(uint8_t **inBuffer) {
     }
 
     return dataSize;
+}
+
+int AudioPlayer::getSoundTouchData() {
+    while (status == PLAY_STATUS_PLAYING || status == PLAY_STATUS_LOADING) {
+        int dataSize = resampleFrame();
+        int sampleNum = sampleNumPerChannel;
+        for (int i = 0; i < dataSize / 2 + 1; ++i) {
+            sampleBuffer[i] = (buffer[2 * i] | ((buffer[2 * i + 1]) << 8));
+        }
+        soundTouch->putSamples(sampleBuffer, sampleNumPerChannel);
+        sampleNum = soundTouch->receiveSamples(sampleBuffer, dataSize / 4);
+        if (sampleNum == 0) {
+            continue;
+        } else {
+            return sampleNum;
+        }
+    }
+    return 0;
 }
 
 
@@ -199,6 +217,7 @@ bool _prepare(AudioPlayer *audioPlayer) {
         pthread_mutex_unlock(&audioPlayer->prepareMutex);
         return false;
     }
+    audioPlayer->initSoundTouch(avCodecContext->sample_rate);
     audioPlayer->createBufferQueuePlayer(avCodecContext->sample_rate);
     audioPlayer->avFormatContext = avFormatContext;
     audioPlayer->avCodecContext = avCodecContext;
@@ -236,7 +255,10 @@ void *decode(void *data) {
         LOGE(TAG, "############ decoding exit = %d ############", audioPlayer->exit);
         pthread_mutex_lock(&audioPlayer->decodeMutex);
         pthread_mutex_lock(&audioPlayer->seekMutex);
-        int ret = av_read_frame(audioPlayer->avFormatContext, avPacket);
+        int ret = 0;
+        if (audioPlayer->avFormatContext != nullptr) {
+            ret = av_read_frame(audioPlayer->avFormatContext, avPacket);
+        }
         pthread_mutex_unlock(&audioPlayer->seekMutex);
         pthread_mutex_unlock(&audioPlayer->decodeMutex);
         if (ret == 0) {
@@ -315,9 +337,9 @@ void AudioPlayer::release() {
         LOGE(TAG, "avCodecContext freed!!!");
     }
     if (avFormatContext != nullptr) {
-//        avformat_close_input(&avFormatContext);
-//        avformat_free_context(avFormatContext);
-//        avFormatContext = nullptr;
+        avformat_close_input(&avFormatContext);
+        avformat_free_context(avFormatContext);
+        avFormatContext = nullptr;
         LOGE(TAG, "avFormatContext freed!!!");
     }
     LOGE(TAG, "############ end release ############");
@@ -577,6 +599,31 @@ void AudioPlayer::setSoundChannel(jint channel) {
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, true);
     }
 }
+
+void AudioPlayer::initSoundTouch(int sampleRate) {
+    soundTouch = new SoundTouch();
+    sampleBuffer = static_cast<SAMPLETYPE *>(malloc(sampleRate * 4));
+    soundTouch->setSampleRate(sampleRate);
+    soundTouch->setChannels(2);
+    soundTouch->setPitch(pitch);
+    soundTouch->setTempo(speed);
+}
+
+void AudioPlayer::setPitch(float pitch) {
+    this->pitch = pitch;
+    if (soundTouch != nullptr) {
+        soundTouch->setPitch(pitch);
+    }
+}
+
+void AudioPlayer::setSpeed(float speed) {
+    this->speed = speed;
+    if (soundTouch != nullptr) {
+        soundTouch->setTempo(speed);
+    }
+}
+
+
 
 
 

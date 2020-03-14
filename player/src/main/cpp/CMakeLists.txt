@@ -22,7 +22,27 @@ add_library( # Sets the name of the library.
         AudioPlayer.cpp
         AudioPacketQueue.cpp
         SLManager.cpp)
+
+add_library(
+        soundtouch
+        SHARED
+
+        ./soundtouch/sources/AAFilter.cpp
+        ./soundtouch/sources/cpu_detect_x86.cpp
+        ./soundtouch/sources/FIFOSampleBuffer.cpp
+        ./soundtouch/sources/FIRFilter.cpp
+        ./soundtouch/sources/InterpolateCubic.cpp
+        ./soundtouch/sources/InterpolateLinear.cpp
+        ./soundtouch/sources/InterpolateShannon.cpp
+        ./soundtouch/sources/PeakFinder.cpp
+        ./soundtouch/sources/RateTransposer.cpp
+        ./soundtouch/sources/SoundTouch.cpp
+        ./soundtouch/sources/sse_optimized.cpp
+        ./soundtouch/sources/TDStretch.cpp
+)
+
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/soundtouch/include)
 set(JNILIBS_SRC ${CMAKE_SOURCE_DIR}/../jniLibs/${ANDROID_ABI})
 message(${ANDROID_ABI})
 add_library(
@@ -97,30 +117,6 @@ set_target_properties(
         ${JNILIBS_SRC}/libswscale.so
 )
 
-#add_library(
-#        openssl
-#        SHARED
-#        IMPORTED
-#)
-#
-#set_target_properties(
-#        openssl
-#        PROPERTIES IMPORTED_LOCATION
-#        ${JNILIBS_SRC}/libssl.so
-#)
-#
-#add_library(
-#        crypto
-#        SHARED
-#        IMPORTED
-#)
-#
-#set_target_properties(
-#        crypto
-#        PROPERTIES IMPORTED_LOCATION
-#        ${JNILIBS_SRC}/libcrypto.so
-#)
-
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by
 # default, you only need to specify the name of the public NDK library
@@ -140,6 +136,7 @@ find_library( # Sets the name of the path variable.
 
 target_link_libraries( # Specifies the target library.
         audio-player
+        soundtouch
         avcodec
         avfilter
         avformat

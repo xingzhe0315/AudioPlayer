@@ -7,6 +7,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
+import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -137,6 +138,55 @@ public class MainActivity extends AppCompatActivity {
                     audioPlayer.resume();
                 } else {
                     audioPlayer.pause();
+                }
+            }
+        });
+
+        RadioGroup speedGroup = findViewById(R.id.speed_rg);
+        speedGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                float speed = 1.0f;
+                switch (checkedId) {
+                    case R.id.speed_05:
+                        speed = 0.5f;
+                        break;
+                    case R.id.speed_1:
+                        speed = 1.0f;
+                        break;
+                    case R.id.speed_15:
+                        speed = 1.5f;
+                        break;
+                    case R.id.speed_2:
+                        speed = 2.0f;
+                        break;
+                }
+                if (audioPlayer != null) {
+                    audioPlayer.setSpeed(speed);
+                }
+            }
+        });
+        RadioGroup pitchGroup = findViewById(R.id.pitch_rg);
+        pitchGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                float pitch = 1.0f;
+                switch (checkedId) {
+                    case R.id.pitch_05:
+                        pitch = 0.5f;
+                        break;
+                    case R.id.pitch_1:
+                        pitch = 1.0f;
+                        break;
+                    case R.id.pitch_15:
+                        pitch = 1.5f;
+                        break;
+                    case R.id.pitch_2:
+                        pitch = 2.0f;
+                        break;
+                }
+                if (audioPlayer != null) {
+                    audioPlayer.setPitch(pitch);
                 }
             }
         });

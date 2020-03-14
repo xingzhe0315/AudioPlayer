@@ -14,6 +14,7 @@
 #include <iostream>
 #include <cstring>
 #include <assert.h>
+#include <SoundTouch.h>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -31,6 +32,8 @@ extern "C" {
 
 #define THREAD_MAIN 1 // 主线程
 #define THREAD_WORK 2 // 子线程
+
+using namespace soundtouch;
 
 class AudioPlayerListener {
 public:
@@ -80,6 +83,12 @@ public:
     pthread_mutex_t prepareMutex;
     pthread_mutex_t decodeMutex;
 
+    SoundTouch *soundTouch = nullptr;
+    SAMPLETYPE *sampleBuffer = nullptr;
+    int sampleNumPerChannel = 0;
+    float pitch = 1.0f;
+    float speed = 1.0f;
+
     AudioPlayer();
 
     ~AudioPlayer();
@@ -100,7 +109,9 @@ public:
 
     void pause();
 
-    int resampleFrame(uint8_t **inBuffer);
+    int resampleFrame();
+
+    int getSoundTouchData();
 
     void createEngine();
 
@@ -116,6 +127,12 @@ public:
     void setVolume(jint volume);
 
     void setSoundChannel(jint channel);
+
+    void initSoundTouch(int sampleRate);
+
+    void setPitch(float pitch);
+
+    void setSpeed(float speed);
 };
 
 

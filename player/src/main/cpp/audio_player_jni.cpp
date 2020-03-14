@@ -149,6 +149,20 @@ setSoundChannel(JNIEnv *env, jobject obj, jlong nativePtr, jint channel) {
 
 extern "C"
 JNIEXPORT void JNICALL
+setPitch(JNIEnv *env, jobject obj, jlong nativePtr, jfloat pitch) {
+    AudioPlayer *audioPlayer = getAudioPlayer(nativePtr);
+    audioPlayer->setPitch(pitch);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+setSpeed(JNIEnv *env, jobject obj, jlong nativePtr, jfloat speed) {
+    AudioPlayer *audioPlayer = getAudioPlayer(nativePtr);
+    audioPlayer->setSpeed(speed);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
 native_init(JNIEnv *env, jobject thiz) {
     auto *audioPlayer = new AudioPlayer();
     auto *listener = new JNIAudioPlayerListener(env, thiz);
@@ -175,7 +189,9 @@ const JNINativeMethod nativeMethod[] = {
         {"_release",         "(J)V",                   (void *) release},
         {"_seekTo",          "(JI)V",                  (void *) seekTo},
         {"_setVolume",       "(JI)V",                  (void *) setVolume},
-        {"_setSoundChannel", "(JI)V",                  (void *) setSoundChannel}
+        {"_setSoundChannel", "(JI)V",                  (void *) setSoundChannel},
+        {"_setPitch",        "(JF)V",                  (void *) setPitch},
+        {"_setSpeed",        "(JF)V",                  (void *) setSpeed}
 };
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reversed) {
