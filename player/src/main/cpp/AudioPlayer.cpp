@@ -54,8 +54,13 @@ void playCallback(SLAndroidSimpleBufferQueueItf caller,
                   void *pContext) {
     auto *audioPlayer = static_cast<AudioPlayer *>(pContext);
     int dataSize = audioPlayer->getSoundTouchData();
+    audioPlayer->clock += dataSize / ((double) (audioPlayer->avCodecContext->sample_rate * 2 * 2));
     if (dataSize != 0) {
-        audioPlayer->mListener->updateTime(audioPlayer->duration, audioPlayer->clock, THREAD_WORK);
+        if (audioPlayer->clock - audioPlayer->lastClock > 0.3) {
+            audioPlayer->lastClock = audioPlayer->clock;
+            audioPlayer->mListener->updateTime(audioPlayer->duration, audioPlayer->clock,
+                                               THREAD_WORK);
+        }
         (*audioPlayer->playerBufferQueue)->Enqueue(audioPlayer->playerBufferQueue,
                                                    audioPlayer->sampleBuffer,
                                                    static_cast<SLuint32>(dataSize * 4));
@@ -114,7 +119,7 @@ int AudioPlayer::resampleFrame() {
                     AV_SAMPLE_FMT_S16,
                     1);
             double tempClock = avFrame->pts * av_q2d(time_base);
-            if (tempClock >= 0) {
+            if (tempClock >= clock) {
                 clock = tempClock;
             }
             break;
@@ -328,6 +333,8 @@ void AudioPlayer::stop() {
 void AudioPlayer::release() {
     LOGE(TAG, "############ begin release ############");
     exit = true;
+    clock = 0;
+    lastClock = 0;
     LOGE(TAG, "############ set exit to true ############");
     pthread_mutex_lock(&prepareMutex);
     pthread_mutex_lock(&decodeMutex);
@@ -566,6 +573,9 @@ void AudioPlayer::createBufferQueuePlayer(int sampleRate) {
              "(*audioPlayerObject)->GetInterface(audioPlayerObject, SL_IID_MUTESOLO, &playerMuteSolo); error!!!");
     }
     assert(SL_RESULT_SUCCESS == result);
+    mPlayerInitialized = true;
+    setVolume(mVolume);
+    setSoundChannel(mSoundChannel);
 }
 
 void AudioPlayer::startPlay() {
@@ -575,16 +585,16 @@ void AudioPlayer::startPlay() {
 void *_seekTo(void *data) {
     AudioPlayer *audioPlayer = static_cast<AudioPlayer *>(data);
     audioPlayer->mPacketQueue->clear(INT64_MAX);
+    audioPlayer->clock = 0;
+    audioPlayer->lastClock = 0;
     pthread_mutex_lock(&audioPlayer->seekMutex);
     auto ts = ((double) audioPlayer->mSeekTime) / av_q2d(audioPlayer->time_base);
-    LOGE(TAG, "seek to : time =  %f", ts);
     if (audioPlayer->decodeFinished) {
         audioPlayer->decodeFinished = false;
         pthread_create(&audioPlayer->decodeThread, nullptr, decode, audioPlayer);
     }
     avcodec_flush_buffers(audioPlayer->avCodecContext);
-    avformat_seek_file(audioPlayer->avFormatContext, audioPlayer->audioIndex, INT64_MIN, ts,
-                       INT64_MAX, 0);
+    av_seek_frame(audioPlayer->avFormatContext, audioPlayer->audioIndex, ts, 0);
     pthread_mutex_unlock(&audioPlayer->seekMutex);
     pthread_exit(&audioPlayer->mSeekThread);
 }
@@ -604,40 +614,39 @@ void AudioPlayer::seekTo(int time) {
 
 void AudioPlayer::setVolume(int percent) {
     mVolume = percent;
-    if (playerVolume != NULL) {
-        if (percent > 30) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -20);
-        } else if (percent > 25) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -22);
-        } else if (percent > 20) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -25);
-        } else if (percent > 15) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -28);
-        } else if (percent > 10) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -30);
-        } else if (percent > 5) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -34);
-        } else if (percent > 3) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -37);
-        } else if (percent > 0) {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -40);
-        } else {
-            (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -100);
-        }
+    if (!mPlayerInitialized) return;
+    if (percent > 30) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -20);
+    } else if (percent > 25) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -22);
+    } else if (percent > 20) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -25);
+    } else if (percent > 15) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -28);
+    } else if (percent > 10) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -30);
+    } else if (percent > 5) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -34);
+    } else if (percent > 3) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -37);
+    } else if (percent > 0) {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -40);
+    } else {
+        (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -100);
     }
 }
 
 void AudioPlayer::setSoundChannel(jint channel) {
-    if (channel == 0)//center
-    {
+    mSoundChannel = channel;
+    if (!mPlayerInitialized) return;
+
+    if (channel == 0) {//center
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 1, false);
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, false);
-    } else if (channel == 1)//left
-    {
+    } else if (channel == 1) {//left
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 1, true);
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, false);
-    } else if (channel == 2)//right
-    {
+    } else if (channel == 2) {//right
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 1, false);
         (*playerMuteSolo)->SetChannelMute(playerMuteSolo, 0, true);
     }

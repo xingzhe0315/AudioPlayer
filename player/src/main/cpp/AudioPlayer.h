@@ -71,10 +71,12 @@ public:
     SLEffectSendItf playerEffectSend;
     SLVolumeItf playerVolume;
     SLMuteSoloItf playerMuteSolo;
+    volatile bool mPlayerInitialized = false;
 
     int duration;
     AVRational time_base;
     double clock;
+    double lastClock;
 
     volatile bool exit = false;
     pthread_mutex_t seekMutex;
@@ -87,6 +89,7 @@ public:
     float pitch = 1.0f;
     float speed = 1.0f;
     int mVolume = 100;
+    int mSoundChannel = 3;
     bool mPacketReadFinished = true;
     AVPacket *mAvPacket;
     int mSeekTime;
