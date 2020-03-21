@@ -87,6 +87,10 @@ public:
     float pitch = 1.0f;
     float speed = 1.0f;
     int mVolume = 100;
+    bool mPacketReadFinished = true;
+    AVPacket *mAvPacket;
+    int mSeekTime;
+    pthread_t mSeekThread;
 
     AudioPlayer();
 

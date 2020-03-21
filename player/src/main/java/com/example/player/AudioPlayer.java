@@ -65,7 +65,7 @@ public class AudioPlayer {
         _resume(mNativePtr);
     }
 
-    public void seekTo(int time) {
+    public void seekTo(final int time) {
         _seekTo(mNativePtr, time);
     }
 
@@ -150,7 +150,7 @@ public class AudioPlayer {
 
     private native void _setSpeed(long nativePtr, float speed);
 
-    public void setOnPrepareListener(OnStateChangeListener onStateChangeListener) {
+    public void setOnStateChangedListener(OnStateChangeListener onStateChangeListener) {
         this.mOnStateChangeListener = onStateChangeListener;
     }
 

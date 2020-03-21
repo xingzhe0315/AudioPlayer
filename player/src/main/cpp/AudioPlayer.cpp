@@ -2,6 +2,7 @@
 // Created by xingzhe on 2020-02-13.
 //
 
+#include <unistd.h>
 #include "AudioPlayer.h"
 
 
@@ -54,8 +55,6 @@ void playCallback(SLAndroidSimpleBufferQueueItf caller,
     auto *audioPlayer = static_cast<AudioPlayer *>(pContext);
     int dataSize = audioPlayer->getSoundTouchData();
     if (dataSize != 0) {
-        audioPlayer->clock +=
-                ((double) dataSize) / audioPlayer->avCodecContext->sample_rate * 2 * 2;
         audioPlayer->mListener->updateTime(audioPlayer->duration, audioPlayer->clock, THREAD_WORK);
         (*audioPlayer->playerBufferQueue)->Enqueue(audioPlayer->playerBufferQueue,
                                                    audioPlayer->sampleBuffer,
@@ -68,7 +67,6 @@ void AudioPlayer::setDataSource(const char *dataSource) {
 }
 
 int AudioPlayer::resampleFrame() {
-    AVPacket *avPacket = av_packet_alloc();
     AVFrame *avFrame = av_frame_alloc();
     int dataSize = 0;
     while (status == PLAY_STATUS_PLAYING || status == PLAY_STATUS_LOADING) {
@@ -83,6 +81,7 @@ int AudioPlayer::resampleFrame() {
                 status = PLAY_STATUS_LOADING;
                 mListener->notify(PLAY_STATUS_LOADING, THREAD_WORK);
             }
+            usleep(1000 * 10);
             continue;
         } else {
             if (status != PLAY_STATUS_PLAYING) {
@@ -93,9 +92,15 @@ int AudioPlayer::resampleFrame() {
         if (exit) {
             break;
         }
-        mPacketQueue->getAudioPacket(avPacket);
-        if (avcodec_send_packet(avCodecContext, avPacket) == 0
-            && avcodec_receive_frame(avCodecContext, avFrame) == 0) {
+        if (mPacketReadFinished) {
+            mAvPacket = av_packet_alloc();
+            mPacketQueue->getAudioPacket(mAvPacket);
+            if (avcodec_send_packet(avCodecContext, mAvPacket) != 0) {
+                continue;
+            }
+        }
+        if (avcodec_receive_frame(avCodecContext, avFrame) == 0) {
+            mPacketReadFinished = false;
             sampleNumPerChannel = swr_convert(swrContext,
                                               &buffer,
                                               avFrame->nb_samples,
@@ -108,13 +113,17 @@ int AudioPlayer::resampleFrame() {
                     sampleNumPerChannel,
                     AV_SAMPLE_FMT_S16,
                     1);
-            clock = avFrame->pts * av_q2d(time_base);
+            double tempClock = avFrame->pts * av_q2d(time_base);
+            if (tempClock >= 0) {
+                clock = tempClock;
+            }
             break;
+        } else {
+            mPacketReadFinished = true;
+            av_packet_free(&mAvPacket);
         }
     }
-    av_packet_free(&avPacket);
     av_frame_free(&avFrame);
-    avPacket = nullptr;
     avFrame = nullptr;
     return dataSize;
 }
@@ -268,7 +277,6 @@ void *decode(void *data) {
         pthread_mutex_unlock(&audioPlayer->decodeMutex);
         if (ret == 0 && !audioPlayer->exit) {
             if (avPacket->stream_index == audioPlayer->audioIndex) {
-                LOGE(TAG, "decode thread working");
                 audioPlayer->mPacketQueue->putAudioPacket(avPacket);
             }
             avPacket = av_packet_alloc();
@@ -324,6 +332,10 @@ void AudioPlayer::release() {
     pthread_mutex_lock(&prepareMutex);
     pthread_mutex_lock(&decodeMutex);
     stop();
+    if (mAvPacket != nullptr) {
+        av_packet_free(&mAvPacket);
+        mAvPacket = nullptr;
+    }
     if (mPacketQueue != nullptr) {
         mPacketQueue->clear(INT64_MAX);
         LOGE(TAG, "mPacketQueue cleared!!!");
@@ -560,24 +572,34 @@ void AudioPlayer::startPlay() {
     (*audioPlayer)->SetPlayState(audioPlayer, SL_PLAYSTATE_PLAYING);
 }
 
+void *_seekTo(void *data) {
+    AudioPlayer *audioPlayer = static_cast<AudioPlayer *>(data);
+    audioPlayer->mPacketQueue->clear(INT64_MAX);
+    pthread_mutex_lock(&audioPlayer->seekMutex);
+    auto ts = ((double) audioPlayer->mSeekTime) / av_q2d(audioPlayer->time_base);
+    LOGE(TAG, "seek to : time =  %f", ts);
+    if (audioPlayer->decodeFinished) {
+        audioPlayer->decodeFinished = false;
+        pthread_create(&audioPlayer->decodeThread, nullptr, decode, audioPlayer);
+    }
+    avcodec_flush_buffers(audioPlayer->avCodecContext);
+    avformat_seek_file(audioPlayer->avFormatContext, audioPlayer->audioIndex, INT64_MIN, ts,
+                       INT64_MAX, 0);
+    pthread_mutex_unlock(&audioPlayer->seekMutex);
+    pthread_exit(&audioPlayer->mSeekThread);
+}
+
+/**
+ * 子线程seek，防止获取锁耗时导致主线程阻塞
+ * @param data
+ * @return
+ */
 void AudioPlayer::seekTo(int time) {
     if (time < 0 || time > duration) {
         return;
     }
-    pthread_mutex_lock(&seekMutex);
-    auto ts = ((double) time) / av_q2d(time_base);
-    LOGE(TAG, "seek to : time =  %f", ts);
-    if (time > clock) {
-        mPacketQueue->clear(ts);
-    } else {
-        if (decodeFinished) {
-            decodeFinished = false;
-            pthread_create(&decodeThread, nullptr, decode, this);
-        }
-        mPacketQueue->clear(INT64_MAX);
-    }
-    avformat_seek_file(avFormatContext, audioIndex, INT64_MIN, ts, INT64_MAX, 0);
-    pthread_mutex_unlock(&seekMutex);
+    mSeekTime = time;
+    pthread_create(&mSeekThread, nullptr, _seekTo, this);
 }
 
 void AudioPlayer::setVolume(int percent) {

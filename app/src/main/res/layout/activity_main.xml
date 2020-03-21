@@ -18,10 +18,18 @@
         android:layout_height="wrap_content"
         android:layout_margin="20dp">
 
+        <ProgressBar
+            android:id="@+id/loading_bar"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:visibility="invisible"
+            android:layout_marginBottom="10dp"/>
+
         <SeekBar
             android:id="@+id/play_progress_seekbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:layout_below="@id/loading_bar" />
 
         <TextView
             android:id="@+id/progress_tv"

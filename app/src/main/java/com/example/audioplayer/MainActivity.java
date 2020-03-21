@@ -7,6 +7,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
+import android.widget.ProgressBar;
 import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -33,6 +34,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView mProgressTv;
     private TextView mTotalTimeTv;
     private SeekBar mVolumeSeekBar;
+    private ProgressBar mLoadingBar;
     private int mProgress;
     private boolean isSeeking;
 
@@ -45,10 +47,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initAudioPlayer() {
-        String audioPath = new File(getExternalFilesDir(null), "audio.mp3").getAbsolutePath();
+        String audioPath = new File(getExternalFilesDir(null), "朴树-平凡之路.ape").getAbsolutePath();
         audioPlayer = new AudioPlayer();
-        audioPlayer.setDataSource(songs[0].url);
-        audioPlayer.setOnPrepareListener(new AudioPlayer.OnStateChangeListener() {
+        audioPlayer.setDataSource(audioPath);
+        audioPlayer.setOnStateChangedListener(new AudioPlayer.OnStateChangeListener() {
             @Override
             public void onPrepared() {
                 Log.e("MediaPlayer", "---onPrepared");
@@ -58,16 +60,19 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onLoading() {
+                mLoadingBar.setVisibility(View.VISIBLE);
                 Log.e("MediaPlayer", "---onLoading");
             }
 
             @Override
             public void onPlaying() {
+                mLoadingBar.setVisibility(View.INVISIBLE);
                 Log.e("MediaPlayer", "---onPlaying");
             }
 
             @Override
             public void onFinished() {
+                mLoadingBar.setVisibility(View.INVISIBLE);
                 Log.e("MediaPlayer", "---onFinished");
             }
         });
@@ -85,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initView() {
+        mLoadingBar = findViewById(R.id.loading_bar);
         mSongNameTv = findViewById(R.id.song_name_tv);
         mPlaySeekBar = findViewById(R.id.play_progress_seekbar);
         mProgressTv = findViewById(R.id.progress_tv);
