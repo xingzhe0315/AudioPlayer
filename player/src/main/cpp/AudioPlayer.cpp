@@ -74,6 +74,8 @@ int AudioPlayer::resampleFrame() {
     while (status == PLAY_STATUS_PLAYING || status == PLAY_STATUS_LOADING) {
         if (mPacketQueue->getQueueSize() <= 0) {
             if (decodeFinished) {
+                status = PLAY_STATUS_FINISHED;
+                release();
                 mListener->notify(PLAY_STATUS_FINISHED, THREAD_WORK);
                 break;
             }
@@ -110,7 +112,10 @@ int AudioPlayer::resampleFrame() {
             break;
         }
     }
-
+    av_packet_free(&avPacket);
+    av_frame_free(&avFrame);
+    avPacket = nullptr;
+    avFrame = nullptr;
     return dataSize;
 }
 
@@ -250,9 +255,9 @@ void AudioPlayer::prepareAsync() {
 void *decode(void *data) {
     LOGE(TAG, "############ begin decode ############");
     auto *audioPlayer = static_cast<AudioPlayer *>(data);
+    audioPlayer->decodeFinished = false;
     AVPacket *avPacket = av_packet_alloc();
     while (!audioPlayer->exit && audioPlayer->avFormatContext != nullptr) {
-        LOGE(TAG, "############ decoding exit = %d ############", audioPlayer->exit);
         pthread_mutex_lock(&audioPlayer->decodeMutex);
         pthread_mutex_lock(&audioPlayer->seekMutex);
         int ret = 0;
@@ -261,8 +266,9 @@ void *decode(void *data) {
         }
         pthread_mutex_unlock(&audioPlayer->seekMutex);
         pthread_mutex_unlock(&audioPlayer->decodeMutex);
-        if (ret == 0) {
+        if (ret == 0 && !audioPlayer->exit) {
             if (avPacket->stream_index == audioPlayer->audioIndex) {
+                LOGE(TAG, "decode thread working");
                 audioPlayer->mPacketQueue->putAudioPacket(avPacket);
             }
             avPacket = av_packet_alloc();
@@ -312,12 +318,12 @@ void AudioPlayer::stop() {
 
 
 void AudioPlayer::release() {
-    pthread_mutex_lock(&prepareMutex);
-    pthread_mutex_lock(&decodeMutex);
     LOGE(TAG, "############ begin release ############");
-    stop();
     exit = true;
     LOGE(TAG, "############ set exit to true ############");
+    pthread_mutex_lock(&prepareMutex);
+    pthread_mutex_lock(&decodeMutex);
+    stop();
     if (mPacketQueue != nullptr) {
         mPacketQueue->clear(INT64_MAX);
         LOGE(TAG, "mPacketQueue cleared!!!");
@@ -341,6 +347,19 @@ void AudioPlayer::release() {
         avformat_free_context(avFormatContext);
         avFormatContext = nullptr;
         LOGE(TAG, "avFormatContext freed!!!");
+    }
+    if (swrContext != nullptr) {
+        swr_close(swrContext);
+        swr_free(&swrContext);
+        swrContext = nullptr;
+    }
+    if (soundTouch != nullptr) {
+        delete (soundTouch);
+        soundTouch = nullptr;
+    }
+    if (sampleBuffer != nullptr) {
+        free(sampleBuffer);
+        sampleBuffer = nullptr;
     }
     LOGE(TAG, "############ end release ############");
     pthread_mutex_unlock(&decodeMutex);
@@ -472,16 +491,17 @@ void AudioPlayer::createBufferQueuePlayer(int sampleRate) {
     SLDataLocator_OutputMix locatorOutputMix = {SL_DATALOCATOR_OUTPUTMIX, outputMixObject};
     SLDataSink dataSink = {&locatorOutputMix, nullptr};
 
-    const SLInterfaceID ids[4] = {SL_IID_BUFFERQUEUE, SL_IID_VOLUME, SL_IID_EFFECTSEND,
+    const SLInterfaceID ids[5] = {SL_IID_BUFFERQUEUE, SL_IID_VOLUME, SL_IID_EFFECTSEND,
+                                  SL_IID_PLAYBACKRATE,
                                   SL_IID_MUTESOLO};
-    const SLboolean req[4] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE,
-                              SL_BOOLEAN_TRUE};
+    const SLboolean req[5] = {SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE,
+                              SL_BOOLEAN_TRUE, SL_BOOLEAN_TRUE};
     result = (*engineEngine)->CreateAudioPlayer(
             engineEngine,
             &audioPlayerObject,
             &dataSource,
             &dataSink,
-            4,
+            5,
             ids,
             req
     );
@@ -521,6 +541,7 @@ void AudioPlayer::createBufferQueuePlayer(int sampleRate) {
     }
     assert(SL_RESULT_SUCCESS == result);
     result = (*audioPlayerObject)->GetInterface(audioPlayerObject, SL_IID_VOLUME, &playerVolume);
+    setVolume(mVolume);
     if (SL_RESULT_SUCCESS != result) {
         LOGE(TAG,
              "(*audioPlayerObject)->GetInterface(audioPlayerObject, SL_IID_VOLUME, &playerVolume); error!!!");
@@ -554,13 +575,13 @@ void AudioPlayer::seekTo(int time) {
             pthread_create(&decodeThread, nullptr, decode, this);
         }
         mPacketQueue->clear(INT64_MAX);
-        avformat_seek_file(avFormatContext, audioIndex, INT64_MIN, ts, INT64_MAX, 0);
-
     }
+    avformat_seek_file(avFormatContext, audioIndex, INT64_MIN, ts, INT64_MAX, 0);
     pthread_mutex_unlock(&seekMutex);
 }
 
 void AudioPlayer::setVolume(int percent) {
+    mVolume = percent;
     if (playerVolume != NULL) {
         if (percent > 30) {
             (*playerVolume)->SetVolumeLevel(playerVolume, (100 - percent) * -20);

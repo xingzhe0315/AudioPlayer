@@ -9,9 +9,12 @@
 #include <pthread.h>
 #include "log_define.h"
 
+#define TAG "AudioPacketQueue"
+#define PACKET_QUEUE_CAPACITY 200
+#define PACKET_QUEUE_LOW_LIMIT 50
+
 extern "C" {
 #include <libavcodec/avcodec.h>
-
 };
 
 class AudioPacketQueue {

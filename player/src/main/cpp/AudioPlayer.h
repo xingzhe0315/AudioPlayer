@@ -56,7 +56,6 @@ public:
     AudioPacketQueue *mPacketQueue;
     uint8_t *buffer;
     int status;
-//    SLManager *slManager;
     volatile bool decodeFinished;
 
     SLObjectItf engineObject = nullptr;
@@ -76,7 +75,6 @@ public:
     int duration;
     AVRational time_base;
     double clock;
-    double lastClock;
 
     volatile bool exit = false;
     pthread_mutex_t seekMutex;
@@ -88,6 +86,7 @@ public:
     int sampleNumPerChannel = 0;
     float pitch = 1.0f;
     float speed = 1.0f;
+    int mVolume = 100;
 
     AudioPlayer();
 
@@ -119,7 +118,6 @@ public:
 
     void startPlay();
 
-//    void playCallback(SLAndroidSimpleBufferQueueItf caller, void *pContext);
     void resume();
 
     void seekTo(jint time);

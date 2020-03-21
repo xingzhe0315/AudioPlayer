@@ -18,14 +18,12 @@ import com.example.player.enums.SoundChannel;
 import java.io.File;
 
 public class MainActivity extends AppCompatActivity {
-
-
     private AudioPlayer audioPlayer;
     private static Song[] songs = {
             new Song("第一首", "http://mpge.5nd.com/2015/2015-11-26/69708/1.mp3"),
             new Song("第二首", "http://mpge.5nd.com/2020/2020-2-29/95962/1.mp3"),
             new Song("第三首", "http://mpge.5nd.com/2020/2020-2-21/95909/1.mp3"),
-            new Song("第四首", "http://mpge.5nd.com/2019/2019-12-16/95097/1.mp3")
+            new Song("第四首", "http://ngcdn001.cnr.cn/live/zgzs/index.m3u8")
     };
     private int index = 0;
 
@@ -92,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
         mProgressTv = findViewById(R.id.progress_tv);
         mTotalTimeTv = findViewById(R.id.total_time_tv);
         mVolumeSeekBar = findViewById(R.id.volume_seekbar);
-        mVolumeSeekBar.setProgress(100);
+        mVolumeSeekBar.setProgress(50);
         mPlayCb = findViewById(R.id.play_checkbox);
         mPlaySeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override

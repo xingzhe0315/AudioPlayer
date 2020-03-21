@@ -19,6 +19,10 @@ AudioPacketQueue::~AudioPacketQueue() {
 int AudioPacketQueue::putAudioPacket(AVPacket *packet) {
     pthread_mutex_lock(&mPacketMutex);
     mPacketQueue.push(packet);
+    if (mPacketQueue.size() > PACKET_QUEUE_CAPACITY) {
+        LOGE(TAG, "the buffer queue is full , decode thread wait");
+        pthread_cond_wait(&mFullCond, &mPacketMutex);
+    }
     pthread_cond_signal(&mEmptyCond);
     pthread_mutex_unlock(&mPacketMutex);
     return 0;
@@ -34,6 +38,10 @@ int AudioPacketQueue::getAudioPacket(AVPacket *packet) {
         av_packet_free(&src);
         av_free(src);
         src = nullptr;
+        if (mPacketQueue.size() < PACKET_QUEUE_LOW_LIMIT) {
+            LOGE(TAG, "the buffer queue is not enough , decode thread weakup");
+            pthread_cond_signal(&mFullCond);
+        }
     } else {
         pthread_cond_wait(&mEmptyCond, &mPacketMutex);
     }
@@ -62,5 +70,6 @@ void AudioPacketQueue::clear(double ts) {
         av_packet_free(&packet);
         packet = nullptr;
     }
+    pthread_cond_signal(&mFullCond);
     pthread_mutex_unlock(&mPacketMutex);
 }

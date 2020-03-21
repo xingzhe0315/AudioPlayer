@@ -21,7 +21,7 @@ add_library( # Sets the name of the library.
         audio_player_jni.cpp
         AudioPlayer.cpp
         AudioPacketQueue.cpp
-        SLManager.cpp)
+        )
 
 add_library(
         soundtouch

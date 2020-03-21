@@ -26,6 +26,9 @@ public class AudioPlayer {
     private OnStateChangeListener mOnStateChangeListener;
     private EventHandler mEventHandler;
     private TimeMetaData mTimeMetaData;
+    private int mVolume = 100;
+    private float mPitch = 1.0f;
+    private float mSpeed = 1.0f;
 
     public AudioPlayer() {
         mEventHandler = new EventHandler(this);
